@@ -1,6 +1,6 @@
 use embedded_hal_async::{delay::DelayNs, digital, i2c::*};
 
-use super::{Bmi323, Error, interrupt::*};
+use super::{interrupt::*, Bmi323, Error};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

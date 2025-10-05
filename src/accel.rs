@@ -1,7 +1,36 @@
+//! Accelerometer configuration and data reading.
+//!
+//! This module provides functions to configure the BMI323 accelerometer
+//! and read acceleration data.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # async fn example(mut imu: bmi323::Bmi323<impl embedded_hal_async::i2c::I2c, impl embedded_hal_async::delay::DelayNs>) {
+//! use bmi323::accel::{AccelConfig, AccelRange};
+//! use bmi323::OutputDataRate;
+//!
+//! // Configure with default settings
+//! imu.set_accel_conf(AccelConfig::default()).await.unwrap();
+//!
+//! // Or customize configuration
+//! let config = AccelConfig {
+//!     odr: OutputDataRate::Hz100,
+//!     range: AccelRange::G4,
+//!     ..Default::default()
+//! };
+//! imu.set_accel_conf(config).await.unwrap();
+//!
+//! // Read acceleration data in g units
+//! let accel = imu.get_accel_data().await.unwrap();
+//! println!("Accel: x={}, y={}, z={}", accel.x, accel.y, accel.z);
+//! # }
+//! ```
+
 use embedded_hal_async::{delay::DelayNs, i2c::*};
 use micromath::vector::Vector3d;
 
-use super::{Bmi323, Error, defs::*};
+use super::{defs::*, Bmi323, Error};
 
 impl<I, D, W, E> Bmi323<I, D, W>
 where
@@ -17,12 +46,19 @@ where
     self.wait_for(crate::Sensor::Accel).await
   }
 
+  /// Read raw accelerometer data (16-bit signed integers).
+  ///
+  /// Returns raw ADC values. Use [`get_accel_data`](Self::get_accel_data)
+  /// to get scaled values in g units.
   pub async fn get_raw_accel_data(&mut self) -> Result<Vector3d<i16>, Error<E>> {
     let xyz: crate::XYZ = self.read(Reg::AccDataX).await?;
     Ok(Vector3d { x: xyz.x, y: xyz.y, z: xyz.z })
   }
 
-  /// Get the accelerometer data in g
+  /// Read accelerometer data scaled to g units.
+  ///
+  /// Returns acceleration in g (standard gravity, 9.81 m/s²) for each axis.
+  /// The scaling is automatically applied based on the configured range.
   pub async fn get_accel_data(&mut self) -> Result<Vector3d<f32>, Error<E>> {
     let accel_data = self.get_raw_accel_data().await?;
     let range = self.get_accel_conf().await?.range.multiplier();
@@ -31,23 +67,28 @@ where
   }
 }
 
+/// Accelerometer configuration register.
+///
+/// Configure the accelerometer's output data rate, measurement range,
+/// bandwidth, averaging, and power mode.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[packbits::pack(bytes = 2)]
 pub struct AccelConfig {
-  /// Output Data Rate (Hz). See `OutputDataRate` (≈0.78 Hz .. 6.4 kHz).
+  /// Output Data Rate in Hz (≈0.78 Hz to 6.4 kHz).
   #[bits(4)]
   pub odr: crate::OutputDataRate,
-  /// Full‑scale range in g (±2/±4/±8/±16).
+  /// Full-scale measurement range (±2g, ±4g, ±8g, or ±16g).
   #[bits(3)]
   pub range: AccelRange,
-  /// Digital low‑pass cutoff relative to ODR (ODR/2 or ODR/4).
+  /// Digital low-pass filter cutoff (ODR/2 or ODR/4).
   #[bits(1)]
   pub bw: crate::Bandwidth,
-  /// Number of samples averaged by on‑chip filter.
+  /// Number of samples averaged by on-chip filter.
   #[bits(3)]
   pub avg: crate::AverageNum,
   #[skip(1)]
+  /// Power mode (normal, low power, etc.).
   #[bits(3)]
   pub mode: AccelPowerMode,
 }
@@ -64,12 +105,21 @@ impl Default for AccelConfig {
   }
 }
 
+/// Accelerometer measurement range.
+///
+/// Determines the full-scale range of acceleration measurements.
+/// Higher ranges allow measuring stronger accelerations but with
+/// lower resolution.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum AccelRange {
+  /// ±2g range
   G2 = 0x00,
+  /// ±4g range
   G4 = 0x01,
+  /// ±8g range
   G8 = 0x02,
+  /// ±16g range
   G16 = 0x03,
 }
 

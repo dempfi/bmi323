@@ -1,21 +1,25 @@
 [package]
-  description = "A Rust driver for the Bosch BMI323 IMU sensor"
-  name        = "bmi323"
+  authors       = ["Ike Kurghinyan <info@dempfi.com>"]
+  categories    = ["embedded", "no-std", "hardware-support"]
+  description   = "Async, no_std driver for the Bosch BMI323 6-axis IMU sensor"
+  documentation = "https://docs.rs/bmi323-rs"
+  edition       = "2021"
+  keywords      = ["bosch", "bmi323", "imu", "sensor", "embedded"]
+  license       = "MIT OR Apache-2.0"
+  name          = "bmi323-rs"
+  readme        = "README.md"
+  repository    = "https://github.com/dempfi/bmi323"
+  version       = "0.1.1"
 
-  authors    = ["Ike Kurghinyan <info@dempfi.com>"]
-  categories = ["embedded", "no-std"]
-  edition    = "2024"
-  keywords   = ["bosch", "no_std", "bmi323"]
-  license    = "MIT OR Apache-2.0"
-  readme     = "README.md"
-  version    = "0.1.0"
+[lib]
+  name = "bmi323"
 
 [dependencies]
-  defmt              = { version = "1.0.1", optional = true }
-  embedded-hal-async = "1.0.0"
-  heapless           = { version = "0.9.1", optional = true }
-  micromath          = { version = "2.1.0", features = ["vector"] }
-  packbits           = { version = "0.1.0", path = "../packbits" }
+  defmt              = { version = "0.3", optional = true }
+  embedded-hal-async = "1.0"
+  heapless           = { version = "0.8", optional = true }
+  micromath          = { version = "2.1", features = ["vector"] }
+  packbits           = "0.1"
 
 [features]
   default = []

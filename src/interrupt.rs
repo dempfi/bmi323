@@ -1,6 +1,38 @@
+//! Interrupt configuration and status reading.
+//!
+//! The BMI323 has two configurable interrupt pins (INT1 and INT2) that can
+//! be mapped to various sensor events and features.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # async fn example(mut imu: bmi323::Bmi323<impl embedded_hal_async::i2c::I2c, impl embedded_hal_async::delay::DelayNs>) {
+//! use bmi323::interrupt::*;
+//!
+//! // Configure INT1 as active-high push-pull
+//! let int1 = IntConfig {
+//!     level: IntLevel::ActiveHigh,
+//!     output: IntOutputMode::PushPull,
+//!     enable: true,
+//! };
+//! imu.set_int_config(true, int1, IntConfig::default()).await.unwrap();
+//!
+//! // Map features to interrupt pins
+//! let int_map = IntMap {
+//!     any_motion: IntPin::Int1,
+//!     tap: IntPin::Int1,
+//!     ..Default::default()
+//! };
+//! imu.set_int_map(int_map).await.unwrap();
+//!
+//! // Read interrupt status
+//! let status = imu.get_int1_status().await.unwrap();
+//! # }
+//! ```
+
 use embedded_hal_async::{delay::DelayNs, i2c::*};
 
-use super::{Bmi323, Error, defs::*};
+use super::{defs::*, Bmi323, Error};
 
 impl<I, D, W, E> Bmi323<I, D, W>
 where
@@ -185,9 +217,10 @@ impl Default for IntConfig {
   }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum IntPin {
+  #[default]
   None = 0x0,
   Int1 = 0x1,
   Int2 = 0x2,
@@ -210,12 +243,6 @@ impl TryFrom<u8> for IntPin {
       0x3 => Ok(IntPin::None), // treat IBI as None here
       _ => Err(()),
     }
-  }
-}
-
-impl Default for IntPin {
-  fn default() -> Self {
-    IntPin::None
   }
 }
 

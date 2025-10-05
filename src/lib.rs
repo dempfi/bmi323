@@ -1,11 +1,42 @@
 #![no_std]
-//! Async, no-std BMI323 driver for I2C.
+#![doc = include_str!("../README.md")]
 //!
-//! Design goals:
-//! - Small, typed helpers for common data paths and features
-//! - Raw register/feature fields exposed where the datasheet uses non‑linear encodings
-//!   (docs describe the raw→units mapping)
-//! - Uses `embedded-hal-async` I2C traits
+//! ## Design Principles
+//!
+//! - **Type-safe**: Strongly-typed configuration structs with sensible defaults
+//! - **Async-first**: Built on `embedded-hal-async` I2C traits
+//! - **Zero-copy**: Direct register access where possible
+//! - **Documented**: Raw register fields include conversion formulas where applicable
+//!
+//! ## Module Organization
+//!
+//! - [`accel`]: Accelerometer configuration and data reading
+//! - [`gyro`]: Gyroscope configuration and data reading
+//! - [`fifo`]: FIFO buffer configuration and reading
+//! - [`interrupt`]: Interrupt pin configuration and status
+//! - [`feature`]: Feature engine for advanced motion detection
+//! - [`calib`]: Calibration utilities
+//! - [`selftest`]: Self-test functionality
+//!
+//! ## Basic Usage
+//!
+//! ```no_run
+//! # async fn example() -> Result<(), bmi323::Error<()>> {
+//! # use bmi323::{Bmi323, accel::AccelConfig};
+//! # let i2c = (); // Your I2C implementation
+//! # let delay = (); // Your delay implementation
+//! let mut imu = Bmi323::new(i2c, delay);
+//!
+//! // Initialize and verify chip
+//! imu.soft_reset().await?;
+//! let chip_id = imu.get_id().await?;
+//!
+//! // Configure and read accelerometer
+//! imu.set_accel_conf(AccelConfig::default()).await?;
+//! let accel = imu.get_accel_data().await?;
+//! # Ok(())
+//! # }
+//! ```
 
 use embedded_hal_async::{delay::DelayNs, i2c::*};
 
@@ -32,20 +63,48 @@ pub use feature::*;
 pub use types::*;
 
 /// Driver error type.
+///
+/// This error type wraps the underlying I2C error and adds BMI323-specific
+/// error conditions.
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error<E> {
+  /// I2C communication error
   I2c(E),
+  /// Chip ID mismatch (expected 0x43)
   InvalidChipId(u8),
+  /// Invalid mode or configuration
   InvalidMode,
+  /// Initialization failed (e.g., feature engine activation timeout)
   Init,
+  /// Data error (e.g., timeout waiting for data ready)
   Data,
 }
 
-/// BMI323 device instance (I2C + delay provider).
+/// BMI323 device driver instance.
 ///
-/// The third generic `W` is used only when the `events` feature is enabled. When
-/// disabled, it is carried as a PhantomData to keep the type arity stable.
+/// This is the main entry point for interacting with the BMI323 sensor.
+/// It owns the I2C bus and delay provider, and maintains internal state
+/// for the device.
+///
+/// # Type Parameters
+///
+/// - `I`: I2C implementation (must implement `embedded_hal_async::i2c::I2c`)
+/// - `D`: Delay provider (must implement `embedded_hal_async::delay::DelayNs`)
+/// - `W`: Interrupt wait implementation (only used with `events` feature)
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn example() -> Result<(), bmi323::Error<()>> {
+/// # use bmi323::Bmi323;
+/// # let i2c = (); // Your I2C implementation
+/// # let delay = (); // Your delay implementation
+/// let mut imu = Bmi323::new(i2c, delay);
+/// imu.soft_reset().await?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct Bmi323<I, D: DelayNs, W = ()> {
   i2c: I,
   delay: D,
@@ -65,6 +124,13 @@ where
   D: DelayNs,
   W: embedded_hal_async::digital::Wait,
 {
+  /// Create a new BMI323 driver instance with interrupt event support.
+  ///
+  /// # Arguments
+  ///
+  /// - `i2c`: I2C bus implementation
+  /// - `delay`: Delay provider for timing operations
+  /// - `int_pin`: Interrupt pin for event-driven operation (requires `events` feature)
   pub fn new(i2c: I, delay: D, int_pin: W) -> Self {
     Self { i2c, delay, dequeue: heapless::Deque::new(), int_pin }
   }
@@ -76,6 +142,12 @@ where
   I: I2c<SevenBitAddress>,
   D: DelayNs,
 {
+  /// Create a new BMI323 driver instance.
+  ///
+  /// # Arguments
+  ///
+  /// - `i2c`: I2C bus implementation
+  /// - `delay`: Delay provider for timing operations
   pub fn new(i2c: I, delay: D) -> Self {
     Self { i2c, delay, _wait: core::marker::PhantomData }
   }
@@ -87,12 +159,36 @@ where
   I: I2c<SevenBitAddress, Error = E>,
   D: DelayNs,
 {
-  /// Read `CHIP_ID` (0x00).
+  /// Read the chip ID register.
+  ///
+  /// Returns the chip ID (should be `0x43` for BMI323).
+  /// Use this to verify communication with the sensor.
+  ///
+  /// # Example
+  ///
+  /// ```no_run
+  /// # async fn example(mut imu: bmi323::Bmi323<impl embedded_hal_async::i2c::I2c, impl embedded_hal_async::delay::DelayNs>) {
+  /// let chip_id = imu.get_id().await.unwrap();
+  /// assert_eq!(chip_id, 0x43);
+  /// # }
+  /// ```
   pub async fn get_id(&mut self) -> Result<u8, Error<E>> {
     let r: ChipId = self.read(Reg::ChipId).await?;
     Ok(r.id)
   }
 
+  /// Perform a soft reset of the sensor.
+  ///
+  /// This resets all registers to their default values and restarts the sensor.
+  /// A delay is automatically applied after the reset command.
+  ///
+  /// # Example
+  ///
+  /// ```no_run
+  /// # async fn example(mut imu: bmi323::Bmi323<impl embedded_hal_async::i2c::I2c, impl embedded_hal_async::delay::DelayNs>) {
+  /// imu.soft_reset().await.unwrap();
+  /// # }
+  /// ```
   pub async fn soft_reset(&mut self) -> Result<(), Error<E>> {
     self.write_u16(Reg::Cmd, Command::SoftReset.into()).await?;
     self.delay.delay_ms(SOFT_RESET_DELAY as u32).await;
@@ -101,7 +197,7 @@ where
 
   /// Read `ERR_REG` (raw bits per datasheet).
   pub async fn get_error(&mut self) -> Result<u16, Error<E>> {
-    self.read_u16(Reg::ErrReg).await
+    self.read_u16(Reg::Err).await
   }
 
   /// Wait until the selected sensor sets its data-ready bit.

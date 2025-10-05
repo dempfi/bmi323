@@ -1,6 +1,6 @@
 use embedded_hal_async::{delay::DelayNs, i2c::*};
 
-use crate::{Bmi323, Error, defs::Reg, defs::*};
+use crate::{defs::Reg, defs::*, Bmi323, Error};
 
 impl<I, D, W, E> Bmi323<I, D, W>
 where
@@ -10,7 +10,7 @@ where
   pub(crate) async fn read<const N: usize, T: TryFrom<[u8; N]>>(&mut self, reg: Reg) -> Result<T, Error<E>> {
     let mut b = [0u8; N];
     self.read_bytes(reg, &mut b).await?;
-    Ok(TryFrom::try_from(b).map_err(|_| Error::Data)?)
+    TryFrom::try_from(b).map_err(|_| Error::Data)
   }
 
   pub(crate) async fn read_u8(&mut self, reg: Reg) -> Result<u8, Error<E>> {
@@ -35,7 +35,7 @@ where
 
     self
       .i2c
-      .write_read(ADDR_I2C_PRIM, &[reg.into()], &mut tmp[..read_len])
+      .write_read(ADDR_I2C_PRIM, &[reg as u8], &mut tmp[..read_len])
       .await
       .map_err(Error::I2c)?;
 
@@ -57,7 +57,7 @@ where
     debug_assert!(data.len() <= 31, "write_bytes buffer too small");
     let mut buf = [0u8; 32];
     let len = 1 + data.len();
-    buf[0] = reg.into();
+    buf[0] = reg as u8;
     buf[1..len].copy_from_slice(data);
     self.i2c.write(ADDR_I2C_PRIM, &buf[..len]).await.map_err(Error::I2c)?;
     self.delay.delay_us(20).await;

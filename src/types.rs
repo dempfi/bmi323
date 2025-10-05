@@ -1,23 +1,29 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
+//! Common types used across the BMI323 driver.
+
+/// 3-axis sensor data (raw 16-bit values).
+///
+/// Used for reading raw accelerometer and gyroscope data directly
+/// from the sensor registers.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[packbits::pack(bytes = 6)]
 pub struct XYZ {
+  /// X-axis raw value
   #[bits(16)]
   pub x: i16,
+  /// Y-axis raw value
   #[bits(16)]
   pub y: i16,
+  /// Z-axis raw value
   #[bits(16)]
   pub z: i16,
 }
 
-impl Default for XYZ {
-  fn default() -> Self {
-    XYZ { x: 0, y: 0, z: 0 }
-  }
-}
-
-/// Output data rates for accel/gyro. Higher ODR reduces latency but increases
-/// power and bandwidth requirements.
+/// Output data rate (ODR) for accelerometer and gyroscope.
+///
+/// Higher ODR values reduce latency but increase power consumption
+/// and data bandwidth requirements. Choose based on your application's
+/// sampling rate needs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum OutputDataRate {

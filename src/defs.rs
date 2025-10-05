@@ -3,7 +3,7 @@
 #[repr(u8)]
 pub(crate) enum Reg {
   ChipId = 0x00,
-  ErrReg = 0x01,
+  Err = 0x01,
   Status = 0x02,
   AccDataX = 0x03,
   GyrDataX = 0x06,
@@ -59,13 +59,6 @@ pub(crate) enum Reg {
   I3cTcSyncOdr = 0x72,
   Cmd = 0x7E,
   CfgRes = 0x7F,
-}
-
-impl From<Reg> for u8 {
-  #[inline]
-  fn from(r: Reg) -> Self {
-    r as u8
-  }
 }
 
 #[repr(u16)]

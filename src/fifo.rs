@@ -1,6 +1,35 @@
+//! FIFO buffer configuration and data reading.
+//!
+//! The BMI323 includes a 2KB FIFO buffer that can store accelerometer,
+//! gyroscope, temperature, and timestamp data.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # async fn example(mut imu: bmi323::Bmi323<impl embedded_hal_async::i2c::I2c, impl embedded_hal_async::delay::DelayNs>) {
+//! use bmi323::fifo::FifoConfig;
+//!
+//! // Configure FIFO to store accelerometer and gyroscope data
+//! let fifo_config = FifoConfig {
+//!     acc_en: true,
+//!     gyr_en: true,
+//!     stop_on_full: false,
+//!     ..Default::default()
+//! };
+//! imu.set_fifo_config(fifo_config).await.unwrap();
+//!
+//! // Set watermark level (triggers interrupt when reached)
+//! imu.set_fifo_watermark(512).await.unwrap();
+//!
+//! // Read FIFO data
+//! let mut buffer = [0u8; 1024];
+//! let bytes_read = imu.read_fifo_bytes(&mut buffer).await.unwrap();
+//! # }
+//! ```
+
 use embedded_hal_async::{delay::DelayNs, i2c::*};
 
-use super::{Bmi323, Error, defs::*};
+use super::{defs::*, Bmi323, Error};
 
 impl<I, D, W, E> Bmi323<I, D, W>
 where
@@ -76,7 +105,7 @@ where
   }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[packbits::pack(bytes = 2)]
 pub struct FifoConfig {
@@ -91,12 +120,6 @@ pub struct FifoConfig {
   pub gyro_en: bool,
   #[bits(1)]
   pub temp_en: bool,
-}
-
-impl Default for FifoConfig {
-  fn default() -> Self {
-    Self { stop_on_full: false, time_en: false, accel_en: false, gyro_en: false, temp_en: false }
-  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
